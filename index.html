@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cafe Flow</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+:root{color-scheme:light}
+@keyframes cfPop{0%{transform:scale(.4);opacity:0}55%{transform:scale(1.18)}100%{transform:scale(1);opacity:1}}
+@keyframes cfRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes cfShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
+body{margin:0;background:var(--color-bg);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+button,[role="button"]{touch-action:manipulation}
+a{color:var(--color-accent-700);text-decoration:none}a:hover{color:var(--color-accent)}
+.cf-grid{display:grid;gap:18px;grid-template-columns:1fr;align-items:start}
+@media(min-width:900px){.cf-grid{grid-template-columns:1.45fr 1fr}}
+.cf-two{display:grid;gap:14px;grid-template-columns:1fr}
+@media(min-width:700px){.cf-two{grid-template-columns:1fr 1fr}}
+.cf-head{max-width:1080px;margin:0 auto;padding:14px 20px 12px;display:flex;align-items:center;gap:10px 12px;flex-wrap:wrap}
+.cf-meta{display:flex;align-items:center;flex-wrap:wrap;gap:2px 6px;font-size:12.5px;margin-top:3px;color:color-mix(in srgb, var(--color-text) 52%, transparent)}
+.cf-nowrap{white-space:nowrap}
+.cf-key{width:64px;height:64px;border-radius:999px;border:0;cursor:pointer;background:var(--color-surface);box-shadow:var(--shadow-sm);font-family:var(--font-heading);font-size:22px;color:var(--color-text);display:grid;place-items:center;transition:transform .08s ease, background .15s ease}
+.cf-key:hover{background:var(--color-neutral-200)}
+.cf-key:active{transform:scale(.94)}
+.cf-key[data-blank]{visibility:hidden}
+@media(max-width:600px){
+  .cf-head{padding:10px 12px 10px;gap:8px 10px}
+  .cf-progress-num{font-size:22px !important}
+  .cf-progress-ring{width:64px !important;height:64px !important}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="app.js"></script>
+</body>
+</html>
