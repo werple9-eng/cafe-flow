@@ -74,7 +74,7 @@
     reminded: ["Reminder sent to the floor", "Recordatorio enviado al equipo"],
     secOpening: ["Opening", "Apertura"],
     secClosing: ["Closing", "Cierre"],
-    secMisc: ["Misc", "Varios"],
+    secService: ["During service", "Durante el servicio"],
     of: ["of", "de"],
     enterCode: ["Enter your passcode", "Introduce tu código"],
     codeHint: ["Manager 1234 · Staff 5678", "Gerente 1234 · Equipo 5678"],
@@ -113,12 +113,12 @@
     { id: 9, sec: "closing", days: EVERY, en: "Cash out the till, drop the safe bag", es: "Cerrar caja y dejar la bolsa en la caja fuerte", due: "8:15 PM", photo: true, done: false, descEn: "Count the drawer twice, bag the surplus, drop it in the safe.", descEs: "Cuenta la caja dos veces, embolsa el excedente y déjalo en la caja fuerte." },
     { id: 10, sec: "closing", days: EVERY, en: "Sweep the floor, stack the chairs", es: "Barrer el suelo y apilar las sillas", due: "8:30 PM", done: false },
     { id: 11, sec: "closing", days: EVERY, en: "Bins out, break down the boxes", es: "Sacar la basura y desmontar las cajas", due: "8:40 PM", done: false },
-    { id: 12, sec: "misc", days: EVERY, en: "Restock oat milk", es: "Reponer leche de avena", due: "7:00 AM", done: true, who: "Theo B." },
-    { id: 13, sec: "misc", days: EVERY, en: "Wipe down tables + bus station", es: "Limpiar mesas y estación de servicio", done: true, who: "Ana R." },
-    { id: 14, sec: "misc", days: EVERY, en: "Photograph the specials board", es: "Fotografiar la pizarra de especiales", photo: true, done: false, descEn: "Snap it straight-on in good light for the socials.", descEs: "Foto de frente y con buena luz para redes." },
-    { id: 15, sec: "misc", days: [2], en: "Call in the pastry order for Thursday", es: "Encargar la bollería para el jueves", due: "2:00 PM", done: false },
+    { id: 12, sec: "service", days: EVERY, en: "Restock oat milk", es: "Reponer leche de avena", due: "7:00 AM", done: true, who: "Theo B." },
+    { id: 13, sec: "service", days: EVERY, en: "Wipe down tables + bus station", es: "Limpiar mesas y estación de servicio", done: true, who: "Ana R." },
+    { id: 14, sec: "service", days: EVERY, en: "Photograph the specials board", es: "Fotografiar la pizarra de especiales", photo: true, done: false, descEn: "Snap it straight-on in good light for the socials.", descEs: "Foto de frente y con buena luz para redes." },
+    { id: 15, sec: "service", days: [2], en: "Call in the pastry order for Thursday", es: "Encargar la bollería para el jueves", due: "2:00 PM", done: false },
     { id: 16, sec: "closing", days: [0, 3], en: "Descale the espresso machine", es: "Descalcificar la máquina", due: "4:00 PM", done: false },
-    { id: 17, sec: "misc", days: [4], en: "Rotate & date the syrup bottles", es: "Rotar y fechar los siropes", done: false }
+    { id: 17, sec: "service", days: [4], en: "Rotate & date the syrup bottles", es: "Rotar y fechar los siropes", done: false }
   ];
 
   const state = {
@@ -377,7 +377,7 @@
     render();
   }
 
-  const SEC_KEYS = [["opening", "secOpening"], ["closing", "secClosing"], ["misc", "secMisc"]];
+  const SEC_KEYS = [["opening", "secOpening"], ["service", "secService"], ["closing", "secClosing"]];
 
   function lockScreen() {
     const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"];
