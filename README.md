@@ -1,8 +1,14 @@
 # Cafe Flow
 
 A bilingual (EN/ES) cafe shift-checklist app with a staff view (tap-to-complete
-tasks, photo-proof capture) and a manager view (team progress, task detail and
-editing, staff management, recurring templates, new-task dialog).
+tasks, photo-proof capture), a manager view (team progress, task detail, staff
+management), and a weekly Schedule tab.
+
+Every task carries the weekdays it runs on (`days`, Mon=0 … Sun=6), and the
+day's checklist is simply the tasks whose days include today. The **Schedule**
+tab is the single place tasks are added, edited and removed — there is no
+separate "recurring task" concept, since a task on several days *is* a
+recurring one. Editing is manager-only; staff can tick tasks off and undo.
 
 The app opens on a 4-digit passcode numpad: **manager 1234, staff 5678** (demo
 codes, defined in `CODES` at the top of `app.js`). Staff unlock into the

@@ -2,13 +2,21 @@
    Plain JS, no build step: full re-render into #app on each state change,
    with delegated events. Data, copy, and styling mirror the design source.
    Extensions over the original design: passcode lock screen (manager 1234,
-   staff 5678), staff management, task editing with descriptions. */
+   staff 5678), staff management, and a weekly Schedule tab that is the single
+   place where tasks are added, edited and removed. */
 (() => {
   "use strict";
 
   const CODES = { "1234": "manager", "5678": "staff" };
 
+  /* weekday indices are Mon=0 … Sun=6; the demo "today" is Friday */
+  const TODAY = 4;
   const DAYS = { en: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], es: ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"] };
+  const DAYS_FULL = {
+    en: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+    es: ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+  };
+  const EVERY = [0, 1, 2, 3, 4, 5, 6];
 
   const T = {
     staff: ["Staff", "Equipo"],
@@ -20,20 +28,18 @@
     footer: ["Tasks reset at 5:00 AM · Ask Marisol to add anything missing", "Las tareas se reinician a las 5:00 · Pide a Marisol lo que falte"],
     floorToday: ["Today on the floor", "Hoy en el salón"],
     onShift: ["tasks open · 4 staff on shift", "tareas abiertas · 4 personas en turno"],
-    newTask: ["New task", "Nueva tarea"],
     teamProgress: ["Team progress", "Progreso del equipo"],
     allTasks: ["Today's tasks", "Tareas de hoy"],
     tapForDetail: ["Tap a task to see its detail and photo proof", "Toca una tarea para ver el detalle y la foto"],
     staffToday: ["Staff today", "Equipo hoy"],
-    templates: ["Recurring tasks", "Tareas recurrentes"],
     edit: ["Edit", "Editar"],
     del: ["Delete", "Borrar"],
     taskName: ["Task name", "Nombre de la tarea"],
     taskPlaceholder: ["e.g. Restock oat milk", "p. ej. Reponer leche de avena"],
     section: ["Section", "Sección"],
     assignTo: ["Assign to", "Asignar a"],
-    repeats: ["Repeats", "Se repite"],
-    onDays: ["On these days", "Estos días"],
+    onDays: ["Runs on these days", "Se hace estos días"],
+    everyDay: ["Every day", "Cada día"],
     dueBy: ["Due by (optional)", "Hora límite (opcional)"],
     duePlaceholder: ["e.g. 11:00 AM", "p. ej. 11:00"],
     requirePhoto: ["Require a photo", "Pedir una foto"],
@@ -41,7 +47,6 @@
     cancel: ["Cancel", "Cancelar"],
     addTask: ["Add task", "Añadir tarea"],
     saveChanges: ["Save changes", "Guardar cambios"],
-    editTemplate: ["Edit recurring task", "Editar tarea recurrente"],
     editTask: ["Edit task", "Editar tarea"],
     description: ["Description (optional)", "Descripción (opcional)"],
     descPlaceholder: ["e.g. Brush out the burrs, wipe the hopper", "p. ej. Cepilla las muelas y limpia la tolva"],
@@ -61,17 +66,9 @@
     open: ["Open", "Pendiente"],
     unassigned: ["Unassigned", "Sin asignar"],
     anyone: ["Anyone can grab this", "Cualquiera puede tomarla"],
-    from: ["From", "De"],
     forWho: ["For", "Para"],
     doneBy: ["Done by", "Hecha por"],
     due: ["due", "para las"],
-    oneTime: ["One-time", "Una vez"],
-    daily: ["Daily", "Diaria"],
-    weekly: ["Weekly", "Semanal"],
-    specificDays: ["Specific days", "Días concretos"],
-    everyDay: ["Every day", "Cada día"],
-    everyTwoHours: ["Every 2 hours", "Cada 2 horas"],
-    tuesdays: ["Tuesdays", "Los martes"],
     completedToday: ["Tasks completed today", "Tareas completadas hoy"],
     photoChecks: ["Photo checks today", "Comprobaciones con foto"],
     reminded: ["Reminder sent to the floor", "Recordatorio enviado al equipo"],
@@ -90,32 +87,38 @@
     personPlaceholder: ["e.g. Jordan Lee", "p. ej. Jordan Lee"],
     initialsLabel: ["Initials (optional)", "Iniciales (opcional)"],
     initialsPlaceholder: ["e.g. JL", "p. ej. JL"],
-    back: ["Back", "Atrás"],
-    addRecurring: ["Add recurring task", "Añadir tarea recurrente"],
-    recurringSub: ["These repeat on a schedule and show up on the day's checklist automatically.", "Se repiten según su programación y aparecen en la lista del día automáticamente."],
-    tapToManage: ["Tap to add, edit or remove", "Toca para añadir, editar o quitar"],
-    noRecurring: ["No recurring tasks yet", "Aún no hay tareas recurrentes"],
-    doneEditing: ["Done", "Listo"],
-    editTasks: ["Edit tasks", "Editar tareas"],
-    undo: ["Undo", "Deshacer"]
+    undo: ["Undo", "Deshacer"],
+    schedule: ["Schedule", "Horario"],
+    scheduleSub: ["Pick a day to see and change what runs on it. Everything is added, edited and removed here.", "Elige un día para ver y cambiar sus tareas. Todo se añade, edita y quita aquí."],
+    scheduleCard: ["Weekly schedule", "Horario semanal"],
+    scheduleCardSub: ["Add, edit and remove tasks by day", "Añade, edita y quita tareas por día"],
+    tasksScheduled: ["tasks scheduled", "tareas programadas"],
+    noTasksDay: ["Nothing scheduled for this day yet", "Aún no hay nada programado para este día"],
+    todayTag: ["Today", "Hoy"],
+    pickADay: ["Pick at least one day", "Elige al menos un día"],
+    removedTask: ["removed from the schedule", "quitada del horario"]
   };
 
+  /* One task list drives everything: `days` says which weekdays it runs on,
+     and the day's checklist is just the tasks whose days include today. */
   const TASKS = [
-    { id: 1, sec: "opening", en: "Unlock, disarm alarm, lights on", es: "Abrir, desactivar la alarma, luces", due: "6:00 AM", who: "Priya S.", done: true },
-    { id: 2, sec: "opening", en: "Fire up espresso machine, run a flush", es: "Encender la máquina de espresso y purgar", due: "6:05 AM", who: "Priya S.", done: true },
-    { id: 3, sec: "opening", en: "Load the pastry case", es: "Llenar la vitrina de bollería", due: "6:20 AM", who: "Ana R.", done: true, photo: true, shot: true, shotAt: "6:18 AM" },
-    { id: 4, sec: "opening", en: "Brew first batch of filter", es: "Preparar el primer lote de filtrado", due: "6:30 AM", done: false },
-    { id: 5, sec: "opening", en: "Fill water jugs, wipe down tables", es: "Llenar jarras de agua y limpiar mesas", due: "6:45 AM", done: false },
-    { id: 6, sec: "opening", en: "Flip the sign, unlock the front door", es: "Girar el cartel y abrir la puerta", due: "7:00 AM", done: false },
-    { id: 7, sec: "closing", en: "Deep clean grinder", es: "Limpieza a fondo del molinillo", due: "8:00 PM", rep: "tuesdays", photo: true, done: false, descEn: "Strip the hopper, brush out the burrs, wipe everything down with a dry cloth.", descEs: "Desmonta la tolva, cepilla las muelas y sécalo todo con un paño seco." },
-    { id: 8, sec: "closing", en: "Empty knock box, rinse portafilters", es: "Vaciar el cajón de posos y enjuagar portafiltros", rep: "everyDay", done: false },
-    { id: 9, sec: "closing", en: "Cash out the till, drop the safe bag", es: "Cerrar caja y dejar la bolsa en la caja fuerte", due: "8:15 PM", by: "Marisol", photo: true, done: false, descEn: "Count the drawer twice, bag the surplus, drop it in the safe.", descEs: "Cuenta la caja dos veces, embolsa el excedente y déjalo en la caja fuerte." },
-    { id: 10, sec: "closing", en: "Sweep the floor, stack the chairs", es: "Barrer el suelo y apilar las sillas", due: "8:30 PM", done: false },
-    { id: 11, sec: "closing", en: "Bins out, break down the boxes", es: "Sacar la basura y desmontar las cajas", due: "8:40 PM", done: false },
-    { id: 12, sec: "misc", en: "Restock oat milk", es: "Reponer leche de avena", rep: "everyDay", done: true, who: "Theo B." },
-    { id: 13, sec: "misc", en: "Wipe down tables + bus station", es: "Limpiar mesas y estación de servicio", rep: "everyTwoHours", done: true, who: "Ana R." },
-    { id: 14, sec: "misc", en: "Photograph the specials board", es: "Fotografiar la pizarra de especiales", by: "Marisol", photo: true, done: false, descEn: "Snap it straight-on in good light for the socials.", descEs: "Foto de frente y con buena luz para redes." },
-    { id: 15, sec: "misc", en: "Call in the pastry order for Thursday", es: "Encargar la bollería para el jueves", due: "2:00 PM", by: "Marisol", done: false }
+    { id: 1, sec: "opening", days: EVERY, en: "Unlock, disarm alarm, lights on", es: "Abrir, desactivar la alarma, luces", due: "6:00 AM", who: "Priya S.", done: true },
+    { id: 2, sec: "opening", days: EVERY, en: "Fire up espresso machine, run a flush", es: "Encender la máquina de espresso y purgar", due: "6:05 AM", who: "Priya S.", done: true },
+    { id: 3, sec: "opening", days: EVERY, en: "Load the pastry case", es: "Llenar la vitrina de bollería", due: "6:20 AM", who: "Ana R.", done: true, photo: true, shot: true, shotAt: "6:18 AM" },
+    { id: 4, sec: "opening", days: EVERY, en: "Brew first batch of filter", es: "Preparar el primer lote de filtrado", due: "6:30 AM", done: false },
+    { id: 5, sec: "opening", days: EVERY, en: "Fill water jugs, wipe down tables", es: "Llenar jarras de agua y limpiar mesas", due: "6:45 AM", done: false },
+    { id: 6, sec: "opening", days: EVERY, en: "Flip the sign, unlock the front door", es: "Girar el cartel y abrir la puerta", due: "7:00 AM", done: false },
+    { id: 7, sec: "closing", days: [1], en: "Deep clean grinder", es: "Limpieza a fondo del molinillo", due: "8:00 PM", photo: true, done: false, descEn: "Strip the hopper, brush out the burrs, wipe everything down with a dry cloth.", descEs: "Desmonta la tolva, cepilla las muelas y sécalo todo con un paño seco." },
+    { id: 8, sec: "closing", days: EVERY, en: "Empty knock box, rinse portafilters", es: "Vaciar el cajón de posos y enjuagar portafiltros", done: false },
+    { id: 9, sec: "closing", days: EVERY, en: "Cash out the till, drop the safe bag", es: "Cerrar caja y dejar la bolsa en la caja fuerte", due: "8:15 PM", photo: true, done: false, descEn: "Count the drawer twice, bag the surplus, drop it in the safe.", descEs: "Cuenta la caja dos veces, embolsa el excedente y déjalo en la caja fuerte." },
+    { id: 10, sec: "closing", days: EVERY, en: "Sweep the floor, stack the chairs", es: "Barrer el suelo y apilar las sillas", due: "8:30 PM", done: false },
+    { id: 11, sec: "closing", days: EVERY, en: "Bins out, break down the boxes", es: "Sacar la basura y desmontar las cajas", due: "8:40 PM", done: false },
+    { id: 12, sec: "misc", days: EVERY, en: "Restock oat milk", es: "Reponer leche de avena", due: "7:00 AM", done: true, who: "Theo B." },
+    { id: 13, sec: "misc", days: EVERY, en: "Wipe down tables + bus station", es: "Limpiar mesas y estación de servicio", done: true, who: "Ana R." },
+    { id: 14, sec: "misc", days: EVERY, en: "Photograph the specials board", es: "Fotografiar la pizarra de especiales", photo: true, done: false, descEn: "Snap it straight-on in good light for the socials.", descEs: "Foto de frente y con buena luz para redes." },
+    { id: 15, sec: "misc", days: [2], en: "Call in the pastry order for Thursday", es: "Encargar la bollería para el jueves", due: "2:00 PM", done: false },
+    { id: 16, sec: "closing", days: [0, 3], en: "Descale the espresso machine", es: "Descalcificar la máquina", due: "4:00 PM", done: false },
+    { id: 17, sec: "misc", days: [4], en: "Rotate & date the syrup bottles", es: "Rotar y fechar los siropes", done: false }
   ];
 
   const state = {
@@ -123,10 +126,10 @@
     lockInput: "",
     lockError: false,
     lang: "en",
-    view: "staff",
-    editMode: false,
+    view: "staff",       // "staff" | "manager" | "schedule"
+    schedDay: TODAY,
     justDone: null,
-    dialog: null,        // task/template dialog: mode "new" | "editTask" | "edit" (template)
+    dialog: null,        // task dialog: mode "new" | "editTask"
     staffDialog: null,   // staff dialog: mode "new" | "edit"
     detail: null,
     capture: null,
@@ -137,13 +140,6 @@
       { id: 2, name: "Ana Ruiz", initials: "AR", d: 5, tot: 7, tone: 1 },
       { id: 3, name: "Theo Baptiste", initials: "TB", d: 4, tot: 9, tone: 1 },
       { id: 4, name: "Marcus Lin", initials: "ML", d: 2, tot: 6, tone: 2 }
-    ],
-    templates: [
-      { id: 101, en: "Deep clean grinder", es: "Limpieza a fondo del molinillo", schedEn: "Every Tuesday · photo required", schedEs: "Cada martes · con foto" },
-      { id: 102, en: "Restock oat milk", es: "Reponer leche de avena", schedEn: "Every day · 7:00 AM", schedEs: "Cada día · 7:00" },
-      { id: 103, en: "Cash out the till", es: "Cerrar la caja", schedEn: "Every day · 8:15 PM · photo required", schedEs: "Cada día · 20:15 · con foto" },
-      { id: 104, en: "Descale the espresso machine", es: "Descalcificar la máquina", schedEn: "Mon, Thu · 4:00 PM", schedEs: "Lun, Jue · 16:00" },
-      { id: 105, en: "Rotate & date the syrup bottles", es: "Rotar y fechar los siropes", schedEn: "Every Friday", schedEs: "Cada viernes" }
     ]
   };
 
@@ -200,11 +196,20 @@
   };
   const initialsOf = name => name.trim().split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
+  const dayNames = () => DAYS[state.lang === "es" ? "es" : "en"];
+  const dayNamesFull = () => DAYS_FULL[state.lang === "es" ? "es" : "en"];
+  const daysLabel = ds => {
+    if (!ds || !ds.length) return tr("pickADay");
+    if (ds.length === 7) return tr("everyDay");
+    const labels = dayNames();
+    return ds.slice().sort((a, b) => a - b).map(i => labels[i]).join(", ");
+  };
+  const runsToday = x => (x.days || EVERY).indexOf(TODAY) > -1;
+  const todaysTasks = () => state.tasks.filter(runsToday);
+
   const metaOf = x => {
     const bits = [];
-    if (x.by) bits.push(tr("from") + " " + x.by);
     if (x.assignee) bits.push(tr("forWho") + " " + x.assignee);
-    if (x.rep) bits.push(tr(x.rep));
     if (x.who && x.done) bits.push(tr("doneBy") + " " + x.who);
     return bits.join(" · ") || (x.done ? tr("done") : tr("anyone"));
   };
@@ -300,7 +305,6 @@
     state.role = null;
     state.lockInput = "";
     state.lockError = false;
-    state.editMode = false;
     state.dialog = null;
     state.staffDialog = null;
     state.detail = null;
@@ -313,36 +317,24 @@
     if (!d) return;
     const name = (d.name || "").trim();
     if (!name) return;
+    if (!d.days || !d.days.length) return;
     const desc = (d.desc || "").trim();
-    if (d.mode === "edit") {
-      const sched = (d.repeat === tr("specificDays") ? (d.days.length ? d.days.join(", ") : tr("onDays")) : d.repeat) + (d.due ? " · " + d.due : "") + (d.photo ? " · " + tr("photoProof").toLowerCase() : "");
-      state.templates = state.templates.map(x => (x.id === d.id ? { ...x, en: name, es: name, schedEn: sched, schedEs: sched } : x));
-      state.dialog = null;
-      flash("“" + name + "” · " + tr("saveChanges"));
-    } else if (d.mode === "newTemplate") {
-      const sched = (d.repeat === tr("specificDays") ? (d.days.length ? d.days.join(", ") : tr("onDays")) : d.repeat) + (d.due ? " · " + d.due : "") + (d.photo ? " · " + tr("photoProof").toLowerCase() : "");
-      state.templates = [...state.templates, { id: Date.now(), en: name, es: name, schedEn: sched, schedEs: sched }];
-      state.dialog = null;
-      flash("“" + name + "” · " + tr("addRecurring"));
-    } else if (d.mode === "editTask") {
+    const days = d.days.slice().sort((a, b) => a - b);
+    if (d.mode === "editTask") {
       state.tasks = state.tasks.map(x => (x.id === d.id ? {
         ...x, en: name, es: name, descEn: desc, descEs: desc,
-        sec: d.sec, due: d.due, photo: !!d.photo,
+        sec: d.sec, days, due: d.due, photo: !!d.photo,
         assignee: d.assignee === tr("unassigned") ? "" : d.assignee
       } : x));
       state.dialog = null;
       flash("“" + name + "” · " + tr("saveChanges"));
     } else {
-      const recurring = d.repeat !== tr("oneTime");
-      const id = Date.now();
-      const task = {
-        id, sec: d.sec, en: name, es: name, descEn: desc, descEs: desc, due: d.due,
+      state.tasks = [...state.tasks, {
+        id: Date.now(), sec: d.sec, days, en: name, es: name,
+        descEn: desc, descEs: desc, due: d.due,
         assignee: d.assignee === tr("unassigned") ? "" : d.assignee,
         done: false, photo: !!d.photo
-      };
-      const sched = d.repeat + (d.due ? " · " + d.due : "") + (d.photo ? " · " + tr("photoProof").toLowerCase() : "");
-      state.tasks = [...state.tasks, task];
-      if (recurring) state.templates = [...state.templates, { id: id + 1, en: name, es: name, schedEn: sched, schedEs: sched }];
+      }];
       state.dialog = null;
       flash("“" + name + "” · " + tr("addTask"));
     }
@@ -365,8 +357,11 @@
     }
   }
 
-  function openNewTask() {
-    state.dialog = { mode: "new", name: "", desc: "", sec: "opening", assignee: tr("unassigned"), repeat: tr("oneTime"), days: [], due: "", photo: false };
+  function openNewTask(day) {
+    state.dialog = {
+      mode: "new", name: "", desc: "", sec: "opening",
+      assignee: tr("unassigned"), days: [day], due: "", photo: false
+    };
     anim.add("dialog");
     render();
   }
@@ -375,7 +370,7 @@
     state.detail = null;
     state.dialog = {
       mode: "editTask", id: t.id, name: nm(t), desc: dsc(t), sec: t.sec,
-      assignee: t.assignee || tr("unassigned"), repeat: "", days: [],
+      assignee: t.assignee || tr("unassigned"), days: (t.days || EVERY).slice(),
       due: t.due || "", photo: !!t.photo
     };
     anim.add("dialog");
@@ -383,7 +378,6 @@
   }
 
   const SEC_KEYS = [["opening", "secOpening"], ["closing", "secClosing"], ["misc", "secMisc"]];
-  const REP_KEYS = ["oneTime", "daily", "specificDays"];
 
   function lockScreen() {
     const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"];
@@ -401,8 +395,8 @@
         <button data-a="${reg(() => { state.lang = "es"; render(); })}" style="border:0;cursor:pointer;font-size:11.5px;font-weight:700;letter-spacing:.06em;padding:6px 11px;border-radius:999px;background: ${es ? "var(--color-accent-2-600)" : "transparent"};color: ${es ? "var(--color-bg)" : "var(--color-text)"}">ES</button>
       </div>
 
-      <div id="cf-dots" style="display:flex;gap:14px;margin:18px 0 4px;${state.lockError ? "animation:cfShake .4s ease both" : ""}">${dots}</div>
-      <div id="cf-lockhint" style="font-size:12px;min-height:18px;color: ${state.lockError ? "var(--color-accent-700)" : "color-mix(in srgb, var(--color-text) 45%, transparent)"}">${esc(state.lockError ? tr("wrongCode") : tr("codeHint"))}</div>
+      <div id="cf-dots" style="display:flex;gap:14px;margin:18px 0 4px">${dots}</div>
+      <div id="cf-lockhint" style="font-size:12px;min-height:18px;color:color-mix(in srgb, var(--color-text) 45%, transparent)">${esc(tr("codeHint"))}</div>
 
       <div style="display:grid;grid-template-columns:repeat(3, 64px);gap:12px;margin-top:10px">
         ${keys.map(k => k === ""
@@ -419,11 +413,13 @@
     const enFg = es ? "var(--color-text)" : "var(--color-bg)";
     const esBg = es ? "var(--color-accent-2-600)" : "transparent";
     const esFg = es ? "var(--color-bg)" : "var(--color-text)";
-    const staffOn = s.view === "staff", mgrOn = s.view === "manager" || s.view === "recurring";
+    const tabBtn = (view, label) => {
+      const on = s.view === view;
+      return `<button data-a="${reg(() => { state.view = view; if (view === "staff") anim.add("staff"); render(); })}" style="border:0;cursor:pointer;font-family:var(--font-heading);font-size:13.5px;padding:9px 15px;border-radius:999px;background: ${on ? "var(--color-accent)" : "transparent"};color: ${on ? "var(--color-bg)" : "var(--color-text)"}">${esc(label)}</button>`;
+    };
     const tabs = s.role === "manager" ? `
       <div style="display:flex;gap:4px;padding:4px;border-radius:999px;background:var(--color-surface)">
-        <button data-a="${reg(() => { state.view = "staff"; anim.add("staff"); render(); })}" style="border:0;cursor:pointer;font-family:var(--font-heading);font-size:13.5px;padding:9px 18px;border-radius:999px;background: ${staffOn ? "var(--color-accent)" : "transparent"};color: ${staffOn ? "var(--color-bg)" : "var(--color-text)"}">${esc(tr("staff"))}</button>
-        <button data-a="${reg(() => { state.view = "manager"; render(); })}" style="border:0;cursor:pointer;font-family:var(--font-heading);font-size:13.5px;padding:9px 18px;border-radius:999px;background: ${mgrOn ? "var(--color-accent)" : "transparent"};color: ${mgrOn ? "var(--color-bg)" : "var(--color-text)"}">${esc(tr("manager"))}</button>
+        ${tabBtn("staff", tr("staff"))}${tabBtn("manager", tr("manager"))}${tabBtn("schedule", tr("schedule"))}
       </div>` : "";
     return `
   <div style="position:sticky;top:0;z-index:20;background:var(--color-bg);border-bottom:1px solid color-mix(in srgb, var(--color-text) 8%, transparent)">
@@ -463,23 +459,6 @@
     const dueBg = x.done ? "transparent" : "var(--color-accent-100)";
     const dueInk = x.done ? "color-mix(in srgb, var(--color-text) 40%, transparent)" : "var(--color-accent-800)";
     const d = dsc(x);
-    if (state.editMode) {
-      return `
-      <div style="display:flex;align-items:center;gap:10px;min-height:68px;padding:12px 10px 12px 14px;border-radius:26px;background: ${bg};box-shadow: ${shadow}">
-        <div style="width:32px;height:32px;flex:none;border-radius:999px;display:grid;place-items:center;border:2px solid ${checkBorder};background: ${checkBg}">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="${checkInk}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="opacity: ${checkOpacity}"><path d="M20 6 9 17l-5-5"></path></svg>
-        </div>
-        <div style="min-width:0;flex:1">
-          <div style="font-size:15.5px;font-weight:600;line-height:1.3;text-decoration: ${deco};color: ${ink}">${esc(nm(x))}</div>
-          <div class="cf-meta">${esc(metaOf(x))}${x.due ? " · " + esc(x.due) : ""}</div>
-        </div>
-        <button class="btn btn-ghost" data-a="${reg(() => openEditTask(x))}" style="min-height:44px;font-size:13.5px;flex:none">${esc(tr("edit"))}</button>
-        <button class="btn btn-ghost" data-a="${reg(() => {
-          state.tasks = state.tasks.filter(y => y.id !== x.id);
-          flash("“" + nm(x) + "” — " + tr("del").toLowerCase());
-        })}" style="min-height:44px;font-size:13.5px;flex:none;color:var(--color-neutral-700)">${esc(tr("del"))}</button>
-      </div>`;
-    }
     return `
       <div ${x.done ? "" : `data-a="${reg(() => tap(x))}" role="button" tabindex="0"`} style="display:flex;align-items:center;gap:14px;min-height:68px;padding:12px 18px 12px 14px;border-radius:26px;cursor:${x.done ? "default" : "pointer"};user-select:none;background: ${bg};box-shadow: ${shadow};transition:background .25s ease, box-shadow .25s ease">
         <div style="width:32px;height:32px;flex:none;border-radius:999px;display:grid;place-items:center;border:2px solid ${checkBorder};background: ${checkBg};transition:all .2s ease">
@@ -499,15 +478,17 @@
   }
 
   function staffView(done, total, pct) {
+    const list = todaysTasks();
     const sections = SEC_KEYS.map(([id, key]) => {
-      const list = state.tasks.filter(x => x.sec === id);
+      const rows = list.filter(x => x.sec === id);
+      if (!rows.length) return "";
       return `
     <div style="margin-top:30px">
       <div style="display:flex;align-items:baseline;gap:10px;padding:0 6px 10px">
         <h4 style="margin:0;font-size:19px">${esc(tr(key))}</h4>
-        <span style="font-size:12px;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-left:auto">${esc(list.filter(x => x.done).length + " " + tr("of") + " " + list.length)}</span>
+        <span style="font-size:12px;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-left:auto">${esc(rows.filter(x => x.done).length + " " + tr("of") + " " + rows.length)}</span>
       </div>
-      <div style="display:flex;flex-direction:column;gap:8px">${list.map(taskRow).join("")}</div>
+      <div style="display:flex;flex-direction:column;gap:8px">${rows.map(taskRow).join("")}</div>
     </div>`;
     }).join("");
 
@@ -517,11 +498,6 @@
 
     return `
   <div style="max-width:620px;margin:0 auto;padding:20px 20px 0">
-    ${state.role === "manager" ? `
-    <div style="display:flex;gap:10px;margin:0 0 16px">
-      ${state.editMode ? `<button class="btn btn-primary" data-a="${reg(openNewTask)}" style="flex:1;min-height:48px;font-size:15px">+ ${esc(tr("addTask"))}</button>` : ""}
-      <button class="btn ${state.editMode ? "btn-secondary" : "btn-primary"}" data-a="${reg(() => { state.editMode = !state.editMode; render(); })}" style="${state.editMode ? "flex:1;" : "width:100%;"}min-height:48px;font-size:15px">${esc(state.editMode ? tr("doneEditing") : tr("editTasks"))}</button>
-    </div>` : ""}
     <div style="background:var(--color-surface);border-radius:32px;padding:22px;box-shadow:var(--shadow-sm)${anim.has("staff") ? ";animation:cfRise .35s ease both" : ""}">
       <div style="display:flex;align-items:center;gap:18px">
         <div class="cf-progress-ring" style="position:relative;width:76px;height:76px;flex:none">
@@ -539,21 +515,84 @@
   </div>`;
   }
 
+  function scheduleView() {
+    const day = state.schedDay;
+    const labels = dayNames();
+    const pills = labels.map((label, i) => {
+      const on = i === day;
+      return `<button data-a="${reg(() => { state.schedDay = i; render(); })}" style="cursor:pointer;flex:1;min-width:0;padding:11px 2px 9px;border-radius:18px;border:1px solid ${on ? "var(--color-accent)" : "var(--color-divider)"};background: ${on ? "var(--color-accent)" : "transparent"};color: ${on ? "var(--color-bg)" : "var(--color-text)"};font-family:var(--font-heading);font-size:13px;display:flex;flex-direction:column;align-items:center;gap:3px">
+        ${esc(label)}
+        <span style="width:5px;height:5px;border-radius:999px;background: ${i === TODAY ? (on ? "var(--color-bg)" : "var(--color-accent)") : "transparent"}"></span>
+      </button>`;
+    }).join("");
+
+    const list = state.tasks.filter(x => (x.days || EVERY).indexOf(day) > -1);
+    const sections = SEC_KEYS.map(([id, key]) => {
+      const rows = list.filter(x => x.sec === id);
+      if (!rows.length) return "";
+      return `
+    <div style="margin-top:22px">
+      <div style="display:flex;align-items:baseline;gap:10px;padding:0 6px 10px">
+        <h4 style="margin:0;font-size:18px">${esc(tr(key))}</h4>
+        <span style="font-size:12px;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-left:auto">${rows.length}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        ${rows.map(x => `
+        <div style="background:var(--color-surface);border-radius:24px;padding:15px 14px 15px 18px;box-shadow:var(--shadow-sm);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="min-width:0;flex:1 1 160px">
+            <div style="font-size:15.5px;font-weight:600;line-height:1.3">${esc(nm(x))}</div>
+            <div class="cf-meta" style="margin-top:3px">
+              ${x.due ? `<span class="cf-nowrap">${esc(x.due)}</span><span>·</span>` : ""}
+              <span class="cf-nowrap">${esc(daysLabel(x.days))}</span>
+              ${x.photo ? `<span class="cf-nowrap" style="display:inline-flex;align-items:center;gap:4px;color:var(--color-accent-700);font-weight:600">${camSvg(13, 3.2)} ${esc(tr("needsPhoto"))}</span>` : ""}
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex:none">
+            <button class="btn btn-secondary" data-a="${reg(() => openEditTask(x))}" style="min-height:44px">${esc(tr("edit"))}</button>
+            <button class="btn btn-secondary" data-a="${reg(() => {
+              state.tasks = state.tasks.filter(y => y.id !== x.id);
+              flash("“" + nm(x) + "” — " + tr("removedTask"));
+            })}" style="min-height:44px;color:var(--color-neutral-700)">${esc(tr("del"))}</button>
+          </div>
+        </div>`).join("")}
+      </div>
+    </div>`;
+    }).join("");
+
+    return `
+  <div style="max-width:680px;margin:0 auto;padding:20px 20px 0">
+    <h3 style="margin:0 0 6px">${esc(tr("schedule"))}</h3>
+    <p style="font-size:13.5px;margin:0 0 16px;color:color-mix(in srgb, var(--color-text) 58%, transparent)">${esc(tr("scheduleSub"))}</p>
+
+    <div style="display:flex;gap:5px;margin-bottom:18px">${pills}</div>
+
+    <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <h4 style="margin:0;font-size:20px">${esc(dayNamesFull()[day])}</h4>
+      ${day === TODAY ? `<span class="tag" style="background:var(--color-accent-100);color:var(--color-accent-800)">${esc(tr("todayTag"))}</span>` : ""}
+      <span style="font-size:13px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-left:auto">${list.length} ${esc(tr("tasksScheduled"))}</span>
+    </div>
+
+    <button class="btn btn-primary" data-a="${reg(() => openNewTask(day))}" style="min-height:48px;width:100%;font-size:15px">+ ${esc(tr("addTask"))}</button>
+
+    ${list.length ? sections : `<div style="border-radius:26px;padding:26px;text-align:center;margin-top:16px;background:var(--color-surface);font-size:14px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">${esc(tr("noTasksDay"))}</div>`}
+  </div>`;
+  }
+
   function managerView(done, total, pct) {
-    const es = state.lang === "es";
+    const list = todaysTasks();
     const progressLine = done + "/" + total + " " + tr("tasksDone");
 
     const stats = [
       { value: done + "/" + total, label: tr("completedToday"), bg: "var(--color-accent-100)" },
-      { value: state.tasks.filter(x => x.photo && x.shot).length + "/" + state.tasks.filter(x => x.photo).length, label: tr("photoChecks"), bg: "var(--color-accent-2-100)" }
+      { value: list.filter(x => x.photo && x.shot).length + "/" + list.filter(x => x.photo).length, label: tr("photoChecks"), bg: "var(--color-accent-2-100)" }
     ].map(s => `
             <div style="border-radius:22px;padding:14px 16px;background: ${s.bg}">
               <div style="font-family:var(--font-heading);font-size:26px;line-height:1">${esc(s.value)}</div>
               <div style="font-size:12.5px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">${esc(s.label)}</div>
             </div>`).join("");
 
-    const mgrTasks = state.tasks.map(x => {
-      const meta = x.done ? tr("done") + (x.who ? " · " + x.who : "") : x.due ? tr("due") + " " + x.due : x.by ? tr("from") + " " + x.by : x.assignee ? tr("forWho") + " " + x.assignee : x.rep ? tr(x.rep) : tr("unassigned");
+    const mgrTasks = list.map(x => {
+      const meta = x.done ? tr("done") + (x.who ? " · " + x.who : "") : x.due ? tr("due") + " " + x.due : x.assignee ? tr("forWho") + " " + x.assignee : tr("unassigned");
       const dot = x.done ? "var(--color-accent-2-500)" : x.due ? "var(--color-accent-500)" : "var(--color-neutral-400)";
       const ink = x.done ? "color-mix(in srgb, var(--color-text) 50%, transparent)" : "var(--color-text)";
       const photoLabel = x.shot ? tr("photoAdded") : tr("needsPhoto");
@@ -599,12 +638,9 @@
 
     return `
   <div style="max-width:1080px;margin:0 auto;padding:20px 20px 0">
-    <div style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:18px">
-      <div style="margin-right:auto">
-        <h3 style="margin:0">${esc(tr("floorToday"))}</h3>
-        <div style="font-size:13.5px;color:color-mix(in srgb, var(--color-text) 58%, transparent)">${esc(total - done + " " + tr("onShift"))}</div>
-      </div>
-      <button class="btn btn-primary" data-a="${reg(openNewTask)}" style="min-height:44px;padding-inline:20px">+ ${esc(tr("newTask"))}</button>
+    <div style="margin-bottom:18px">
+      <h3 style="margin:0">${esc(tr("floorToday"))}</h3>
+      <div style="font-size:13.5px;color:color-mix(in srgb, var(--color-text) 58%, transparent)">${esc(total - done + " " + tr("onShift"))}</div>
     </div>
 
     <div class="cf-grid">
@@ -628,6 +664,17 @@
       </div>
 
       <div style="display:flex;flex-direction:column;gap:18px">
+        <div data-a="${reg(() => { state.view = "schedule"; render(); })}" role="button" tabindex="0" style="display:flex;align-items:center;gap:14px;background:var(--color-surface);border-radius:32px;padding:20px 22px;box-shadow:var(--shadow-sm);cursor:pointer">
+          <div style="width:44px;height:44px;flex:none;border-radius:999px;background:var(--color-accent-100);color:var(--color-accent-700);display:grid;place-items:center">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="4"></rect><path d="M8 3v4M16 3v4M3 11h18"></path></svg>
+          </div>
+          <div style="min-width:0;flex:1">
+            <div style="font-family:var(--font-heading);font-size:18px">${esc(tr("scheduleCard"))}</div>
+            <div style="font-size:12.5px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">${esc(tr("scheduleCardSub"))}</div>
+          </div>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:color-mix(in srgb, var(--color-text) 40%, transparent)"><path d="m9 18 6-6-6-6"></path></svg>
+        </div>
+
         <div style="background:var(--color-surface);border-radius:32px;padding:22px;box-shadow:var(--shadow-sm)">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
             <h4 style="margin:0;font-size:18px">${esc(tr("staffToday"))}</h4>
@@ -639,55 +686,8 @@
           </div>
           <div style="display:flex;flex-direction:column;gap:12px">${staffRows}</div>
         </div>
-
-        <div data-a="${reg(() => { state.view = "recurring"; render(); })}" role="button" tabindex="0" style="display:flex;align-items:center;gap:14px;background:var(--color-surface);border-radius:32px;padding:20px 22px;box-shadow:var(--shadow-sm);cursor:pointer">
-          <div style="width:44px;height:44px;flex:none;border-radius:999px;background:var(--color-accent-100);color:var(--color-accent-700);display:grid;place-items:center">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path></svg>
-          </div>
-          <div style="min-width:0;flex:1">
-            <div style="font-family:var(--font-heading);font-size:18px">${esc(tr("templates"))}</div>
-            <div style="font-size:12.5px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">${state.templates.length} · ${esc(tr("tapToManage"))}</div>
-          </div>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex:none;color:color-mix(in srgb, var(--color-text) 40%, transparent)"><path d="m9 18 6-6-6-6"></path></svg>
-        </div>
       </div>
     </div>
-  </div>`;
-  }
-
-  function recurringView() {
-    const es = state.lang === "es";
-    const rows = state.templates.length ? state.templates.map(r => `
-      <div style="background:var(--color-surface);border-radius:26px;padding:16px 14px 16px 20px;box-shadow:var(--shadow-sm);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <div style="min-width:0;flex:1 1 170px">
-          <div style="font-size:16px;font-weight:600">${esc(nm(r))}</div>
-          <div style="font-size:13px;margin-top:2px;color:color-mix(in srgb, var(--color-text) 58%, transparent)">${esc(es ? r.schedEs : r.schedEn)}</div>
-        </div>
-        <div style="display:flex;gap:8px;flex:none">
-          <button class="btn btn-secondary" data-a="${reg(() => {
-            state.dialog = { mode: "edit", id: r.id, name: nm(r), sec: "closing", assignee: tr("unassigned"), repeat: tr("daily"), days: [], due: "", photo: /photo|foto/.test(es ? r.schedEs : r.schedEn) };
-            anim.add("dialog");
-            render();
-          })}" style="min-height:44px">${esc(tr("edit"))}</button>
-          <button class="btn btn-secondary" data-a="${reg(() => {
-            state.templates = state.templates.filter(x => x.id !== r.id);
-            flash("“" + nm(r) + "” — " + tr("del").toLowerCase());
-          })}" style="min-height:44px;color:var(--color-neutral-700)">${esc(tr("del"))}</button>
-        </div>
-      </div>`).join("")
-      : `<div style="border-radius:26px;padding:26px;text-align:center;background:var(--color-surface);font-size:14px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">${esc(tr("noRecurring"))}</div>`;
-
-    return `
-  <div style="max-width:620px;margin:0 auto;padding:20px 20px 0">
-    <button class="btn btn-secondary" data-a="${reg(() => { state.view = "manager"; render(); })}" style="min-height:44px">← ${esc(tr("back"))}</button>
-    <h3 style="margin:18px 0 6px">${esc(tr("templates"))}</h3>
-    <p style="font-size:13.5px;margin:0 0 16px;color:color-mix(in srgb, var(--color-text) 58%, transparent)">${esc(tr("recurringSub"))}</p>
-    <button class="btn btn-primary" data-a="${reg(() => {
-      state.dialog = { mode: "newTemplate", name: "", sec: "closing", assignee: tr("unassigned"), repeat: tr("daily"), days: [], due: "", photo: false };
-      anim.add("dialog");
-      render();
-    })}" style="min-height:48px;width:100%;font-size:15px">+ ${esc(tr("addRecurring"))}</button>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">${rows}</div>
   </div>`;
   }
 
@@ -729,11 +729,11 @@
         <div style="display:flex;flex-wrap:wrap;gap:6px">
           <span class="tag" style="background: ${statusBg};color: ${statusInk}">${esc(dt.done ? tr("done") : tr("open"))}</span>
           <span class="tag tag-neutral">${esc(meta)}</span>
+          <span class="tag tag-neutral">${esc(daysLabel(dt.days))}</span>
         </div>
         ${d ? `<div class="dialog-body" style="margin:0">${esc(d)}</div>` : ""}
         ${photoBlock}
         <div class="dialog-actions">
-          ${state.role === "manager" ? `<button class="btn btn-secondary" data-a="${reg(() => openEditTask(dt))}" style="min-height:44px">${esc(tr("edit"))}</button>` : ""}
           ${!dt.done ? `<button class="btn btn-secondary" data-a="${reg(() => { state.detail = null; flash(tr("reminded")); })}" style="min-height:44px">${esc(tr("remind"))}</button>` : ""}
           <button class="btn btn-primary" data-a="${reg(close)}" style="min-height:44px">${esc(tr("close"))}</button>
         </div>
@@ -780,8 +780,6 @@
   function formDialog() {
     const d = state.dialog;
     if (!d) return "";
-    const isTemplate = d.mode === "edit" || d.mode === "newTemplate";
-    const isEditTask = d.mode === "editTask";
     const close = () => { state.dialog = null; render(); };
     const optBtn = (label, active, pick, extra) => {
       const p = pill(active);
@@ -795,14 +793,15 @@
     const assigneeOpts = people.map(label =>
       optBtn(label, d.assignee === label, () => { state.dialog = { ...state.dialog, assignee: label }; render(); }, "font-size:13px;padding:9px 15px;")).join("");
 
-    const repeatOpts = REP_KEYS.map(k =>
-      optBtn(tr(k), d.repeat === tr(k), () => { state.dialog = { ...state.dialog, repeat: tr(k) }; render(); }, "font-size:13px;padding:9px 15px;")).join("");
-
-    const showDays = !isEditTask && d.repeat === tr("specificDays");
-    const dayOpts = DAYS[state.lang === "es" ? "es" : "en"].map(label => {
-      const on = d.days && d.days.indexOf(label) > -1;
+    const allOn = d.days.length === 7;
+    const everyBtn = optBtn(tr("everyDay"), allOn, () => {
+      state.dialog = { ...state.dialog, days: allOn ? [] : EVERY.slice() };
+      render();
+    }, "font-size:13px;padding:9px 15px;");
+    const dayOpts = dayNames().map((label, i) => {
+      const on = d.days.indexOf(i) > -1;
       return optBtn(label, on, () => {
-        state.dialog = { ...state.dialog, days: on ? d.days.filter(y => y !== label) : [...(d.days || []), label] };
+        state.dialog = { ...state.dialog, days: on ? d.days.filter(y => y !== i) : [...d.days, i] };
         render();
       }, "width:42px;height:42px;font-size:12.5px;");
     }).join("");
@@ -812,27 +811,33 @@
     const photoReqInk = d.photo ? "var(--color-accent-2-700)" : "color-mix(in srgb, var(--color-text) 45%, transparent)";
     const switchBg = d.photo ? "var(--color-accent-2-600)" : "color-mix(in srgb, var(--color-text) 22%, transparent)";
     const switchKnob = d.photo ? "translateX(18px)" : "translateX(0)";
-
-    const title = d.mode === "newTemplate" ? tr("addRecurring") : isTemplate ? tr("editTemplate") : isEditTask ? tr("editTask") : tr("newTask");
-    const saveLabel = d.mode === "new" ? tr("addTask") : d.mode === "newTemplate" ? tr("addRecurring") : tr("saveChanges");
+    const canSave = !!(d.name || "").trim() && d.days.length > 0;
 
     return `
     <div class="dialog-backdrop" data-a="${reg(close)}" style="z-index:60">
       <div class="dialog" data-stop style="${anim.has("dialog") ? "animation:cfRise .22s ease both;" : ""}max-height:92vh;overflow:auto">
-        <div class="dialog-title">${esc(title)}</div>
+        <div class="dialog-title">${esc(d.mode === "editTask" ? tr("editTask") : tr("addTask"))}</div>
 
         <div class="field">
           <label>${esc(tr("taskName"))}</label>
           <input class="input" data-input="name" value="${esc(d.name || "")}" placeholder="${esc(tr("taskPlaceholder"))}" style="min-height:44px">
         </div>
 
-        ${isTemplate ? "" : `
         <div class="field">
           <label>${esc(tr("description"))}</label>
           <textarea class="input" data-input="desc" placeholder="${esc(tr("descPlaceholder"))}" style="min-height:64px;border-radius:22px">${esc(d.desc || "")}</textarea>
-        </div>`}
+        </div>
 
-        ${isTemplate ? "" : `
+        <div class="field">
+          <label>${esc(tr("onDays"))}</label>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+            ${everyBtn}
+            <span style="width:1px;height:26px;background:var(--color-divider);margin:0 2px"></span>
+            ${dayOpts}
+          </div>
+          ${d.days.length ? "" : `<div style="font-size:12px;margin-top:6px;color:var(--color-accent-700)">${esc(tr("pickADay"))}</div>`}
+        </div>
+
         <div class="field">
           <label>${esc(tr("section"))}</label>
           <div style="display:flex;flex-wrap:wrap;gap:7px">${sectionOpts}</div>
@@ -841,19 +846,7 @@
         <div class="field">
           <label>${esc(tr("assignTo"))}</label>
           <div style="display:flex;flex-wrap:wrap;gap:7px">${assigneeOpts}</div>
-        </div>`}
-
-        ${isEditTask ? "" : `
-        <div class="field">
-          <label>${esc(tr("repeats"))}</label>
-          <div style="display:flex;flex-wrap:wrap;gap:7px">${repeatOpts}</div>
-        </div>`}
-
-        ${showDays ? `
-        <div class="field">
-          <label>${esc(tr("onDays"))}</label>
-          <div style="display:flex;flex-wrap:wrap;gap:6px">${dayOpts}</div>
-        </div>` : ""}
+        </div>
 
         <div class="field">
           <label>${esc(tr("dueBy"))}</label>
@@ -873,7 +866,7 @@
 
         <div class="dialog-actions">
           <button class="btn btn-secondary" data-a="${reg(close)}" style="min-height:44px">${esc(tr("cancel"))}</button>
-          <button class="btn btn-primary" data-a="${reg(save)}" style="min-height:44px">${esc(saveLabel)}</button>
+          <button class="btn btn-primary" data-a="${reg(save)}" style="min-height:44px${canSave ? "" : ";opacity:.45"}">${esc(d.mode === "editTask" ? tr("saveChanges") : tr("addTask"))}</button>
         </div>
       </div>
     </div>`;
@@ -916,17 +909,17 @@
     if (!state.role) {
       app.innerHTML = lockScreen() + toast;
     } else {
-      const tasks = state.tasks;
-      const done = tasks.filter(x => x.done).length;
-      const total = tasks.length;
-      const pct = Math.round((done / total) * 100);
+      const list = todaysTasks();
+      const done = list.filter(x => x.done).length;
+      const total = list.length;
+      const pct = total ? Math.round((done / total) * 100) : 0;
 
       app.innerHTML = `
 <div style="min-height:100vh;background:var(--color-bg);padding:0 0 96px">
   ${header()}
   ${state.view === "staff" ? staffView(done, total, pct) : ""}
   ${state.view === "manager" ? managerView(done, total, pct) : ""}
-  ${state.view === "recurring" ? recurringView() : ""}
+  ${state.view === "schedule" ? scheduleView() : ""}
   ${detailDialog()}
   ${captureDialog()}
   ${formDialog()}
